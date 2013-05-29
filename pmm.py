@@ -3,37 +3,61 @@ import SocketServer
 import socket
 import dns.resolver
 import json
+import argparse
 from pprint import pprint
 
-class PoorMansMulticast(SocketServer.BaseRequestHandler):
+class PoorMansMulticastServer(SocketServer.ThreadingUDPServer):
     """
     """
+    def __init__(self,server_address,RequestHandlerClass,domains):
+        SocketServer.ThreadingUDPServer.__init__(self,server_address,RequestHandlerClass)
+        self.domains = domains
+
+class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
+    """
+    """
+
     #this actully passes targets as a sort of reference
     #bit confusing if you ask me
     #http://stackoverflow.com/questions/986006/python-how-do-i-pass-a-variable-by-reference
-    def get_ips(self,domain,targets):
+    def get_ips(self,domain,targets,messages):
         """
         """
+        message_type = "RESOLVE_IP"
+        message_status = ""
+        message_text = ""
         try:
             dnsinfo =  socket.gethostbyname_ex(str(domain['domain']))
+            message_status = "INFO"
+            message_text = { 'ips': dnsinfo[2] }
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': str(domain['domain']), 'data': message_text }})
         except IOError, e:
-            print("ERROR: %s reason: %s" % (domain, e))
+            message_status = "ERROR"
+            message_text = str(e)
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': str(domain['domain']), 'data': message_text }})
             return False
         for ip in dnsinfo[2]:
             targets['targets'].append({'ip': ip, 'port': domain['port']})
         return True
     
-    def echo(self,data,target):
+    def echo(self,data,target,messages):
         """
         """
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        message_type = "SEND"
+        message_status = ""
+        message_text = ""
         try:
             send_socket.connect((target['ip'], target['port']))
             send_socket.send(data)
             send_socket.close()
+            message_status = "INFO"
+            message_text = data
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'target': target['ip'] , 'data': message_text }})
         except socket.error, (value,message): 
-            print "ERROR: Could not open socket: " + message 
-        return data
+            message_status = "ERROR"
+            message_text = message
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': str(domain['domain']), 'data': message_text }})
 
     def get_jsondata(self,data):
         """
@@ -45,57 +69,73 @@ class PoorMansMulticast(SocketServer.BaseRequestHandler):
         except ValueError: 
             print ("ERROR: No json found: %s" % data)
         return jsondata, data
-    def get_srv(self,srv,proto,domain):
+    def get_srv(self,srv,proto,domain,messages):
         """
         """
         domains = { "domains": [] }
         dest_port = ""
+        message_type = "RESOLVE_SRV"
+        message_status = ""
+        message_text = ""
         status = False
         try:
             answer = dns.resolver.query("_%s._%s.%s" % (srv,proto,domain), 'SRV') 
+            message_status = "INFO"
+            message_text = str(answer)
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': domain, 'data': message_text }})
             for rrdata in answer:
                 domains['domains'].append({ "domain": rrdata.target, "port": rrdata.port} )
-                print domains
             status = True
 
         except dns.resolver.NXDOMAIN:
-            print "ERROR: No SRV RR found for %s" % domain
-            return status, domain
+            message_status = "ERROR"
+            message_text = " SRV RR NOT found for %s" % domain
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': domain, 'data': message_text }})
+            return status, domains
         except dns.resolver.Timeout:
-            print "ERROR: Timed out resolving %s" % domain
-            return status, domain
+            message_status = "ERROR"
+            message_text = "Timed out resolving %s" % domain
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': domain, 'data': message_text }})
+            return status, domains
         except dns.exception.DNSException:
-            print "ERROR: Unhandled exception"
-            return status, domain
+            message_status = "ERROR"
+            message_text = "Unhandled exception"
+            messages['messages'].append({'message': { 'type': message_type, 'status': message_status, 'domain': domain, 'data': message_text }})
+            return status, domains
         return status, domains
         
     def handle(self):
         """
         """
-        print "HERE: %s" % self.request[0]
         data = str(self.request[0]).strip()
         incoming = self.request[1]
-        port = 9999
         targets = { "targets": [] }
-        domains =   [{ 'domain': 'pmm.johnbond.org', 'port': port }, { 'domain': 'ripe.jonbond.org', 'port': port}] 
-
+        messages = { "messages": [] }
         jsondata, data = self.get_jsondata(data)
         if jsondata:
-            domains = data["domains"]
+            self.server.domains = data["domains"]
             data = data['data']
-        for domain in domains:
-            status, srv_targets = self.get_srv("pmm","udp",domain['domain'])
+        for domain in self.server.domains:
+            status, srv_targets = self.get_srv("pmm","udp",domain['domain'],messages)
             if status:
                 for domain in srv_targets['domains']:
-                    self.get_ips(domain,targets)
+                    self.get_ips(domain,targets,messages)
             else:
-                self.get_ips(domain,targets)
+                self.get_ips(domain,targets,messages)
         for target in targets['targets']:
-            data = self.echo(data, target)
-        incoming.sendto(json.dumps({"message": data }), self.client_address)
-        self.request = []
-
-if __name__ == "__main__":
-    HOST, PORT = "0.0.0.0", 9999
-    server = SocketServer.UDPServer((HOST, PORT), PoorMansMulticast)
+            message = self.echo(data, target,messages)
+        incoming.sendto(json.dumps(messages), self.client_address)
+def main():
+    parser = argparse.ArgumentParser(description="Deployment script for atlas anchor")
+    parser.add_argument('--listen', metavar="0.0.0.0:9999", default="0.0.0.0:9999", help='listen address:port for server port is optional')
+    parser.add_argument('--domains', metavar="pmm.johnbond.org:9999[,ripe.jonbond.org:9999]", default="pmm.johnbond.org:9999", help='comma seperated list of domain:port pairs')
+    args = parser.parse_args()
+    domains = []
+    for domain in args.domains.split(","):
+        domain, port = domain.split(":")
+        domains.append({'domain': domain, 'port':port})
+    host, port = args.listen.split(":")
+    server = PoorMansMulticastServer((host, int(port)), PoorMansMulticastHanlder, domains)
     server.serve_forever()
+if __name__ == "__main__":
+    main()
