@@ -21,6 +21,7 @@ class PoorMansMulticastServer(SocketServer.ThreadingUDPServer):
 
 class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
     """
+    Handeler class 
     """
 
     #this actully passes targets as a sort of reference
@@ -28,6 +29,27 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
     #http://stackoverflow.com/questions/986006/python-how-do-i-pass-a-variable-by-reference
     def get_ips(self,domain,targets,messages):
         """
+        Resolve domain and append all results to targets.
+        targets is passed by reference (should probably cange this so it just returns new targets)
+        same with messages.  but perhaps both of these should be classes.
+        Dictionaries constructed as follows are appended to targets['targets']
+        {
+            'ip': ""
+            'port': ""
+        }
+
+        messages is passed by refrence and used to store status messages to return to the client
+        Dictionaries constructed as follows are appended to messages['messages'] 
+        { 
+            'message': {
+                'type': ""
+                'status': ""
+                'domain': ""
+                'data': ""
+            }
+        }
+
+        return True/False
         """
         message_type = "RESOLVE_IP"
         message_status = ""
@@ -54,7 +76,6 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
             'port': ""
         }
         messages is passed by refrence and used to store status messages to return to the client
-        (i should convert messages to a class)
         Dictionaries constructed as follows are appended to messages['messages'] 
         { 
             'message': {
@@ -97,7 +118,6 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
         """
         Try to resolve _srv._proto._domain.  
         messages is passed by refrence and used to store status messages to return to the client
-        (i should convert messages to a class)
         Dictionaries constructed as follows are appended to messages['messages'] 
         { 
             'message': {
