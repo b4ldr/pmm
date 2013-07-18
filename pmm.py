@@ -8,6 +8,12 @@ from pprint import pprint
 
 class PoorMansMulticastServer(SocketServer.ThreadingUDPServer):
     """
+    SocketServer.ThreadingUDPServer With extra argument domains
+
+    Instance variables:
+    
+    - RequestHandlerClass
+    - domains
     """
     def __init__(self,server_address,RequestHandlerClass,domains):
         SocketServer.ThreadingUDPServer.__init__(self,server_address,RequestHandlerClass)
@@ -42,6 +48,21 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
     
     def echo(self,data,target,messages):
         """
+        Send data to target.  target is a dictionary constructed as follows 
+        {
+            'ip': ""
+            'port': ""
+        }
+        messages is passed by refrence and used to store status messages to return to the client
+        (i should convert messages to a class)
+        Dictionaries constructed as follows are appended to messages['messages'] 
+        { 
+            'message': {
+                'type': ""
+                'status': ""
+                'domain': ""
+                'data': ""
+            }
         """
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         message_type = "SEND"
@@ -61,6 +82,9 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
 
     def get_jsondata(self,data):
         """
+        Try to convert data into a json object.  
+        if sucessfull return the true and the json object
+        else return false and data
         """
         jsondata = False
         try:
@@ -71,7 +95,29 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
         return jsondata, data
     def get_srv(self,srv,proto,domain,messages):
         """
+        Try to resolve _srv._proto._domain.  
+        messages is passed by refrence and used to store status messages to return to the client
+        (i should convert messages to a class)
+        Dictionaries constructed as follows are appended to messages['messages'] 
+        { 
+            'message': {
+                'type': ""
+                'status': ""
+                'domain': ""
+                'data': ""
+            }
+        }
+        
+        Return the status of the operation and a dictionary (empty on faliure) constructed as follows
+        { 
+            'domains':[ 
+                { 
+                    'domain': ""
+                    'port': ""
+            ]
+        }
         """
+
         domains = { "domains": [] }
         dest_port = ""
         message_type = "RESOLVE_SRV"
@@ -106,6 +152,8 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
         
     def handle(self):
         """
+        RequestHandlerClass handle function
+        handler listens for json datastreams 
         """
         data = str(self.request[0]).strip()
         incoming = self.request[1]
