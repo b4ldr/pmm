@@ -173,7 +173,20 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
     def handle(self):
         """
         RequestHandlerClass handle function
-        handler listens for json datastreams 
+        handler listens for json datastreams constructed as follows
+        { 
+            'domains': [ 
+                { 'domain': '' }, 
+                { 'domain': ''}
+            ], 
+            'data':''
+        }
+
+        the handeler tries to send data to all SRV entries resolved by
+        _pmm._udp._domain
+
+        i think think it dose other clever shit i ther is no SRV record but its been a while since i looked at this
+        the habdle also returns a json object to the sender which includes the message log
         """
         data = str(self.request[0]).strip()
         incoming = self.request[1]
