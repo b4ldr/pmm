@@ -207,6 +207,7 @@ class PoorMansMulticastHanlder(SocketServer.BaseRequestHandler):
             message = self.echo(data, target,messages)
         incoming.sendto(json.dumps(messages), self.client_address)
 def main():
+    ''' main function for using on cli'''
     parser = argparse.ArgumentParser(description="Deployment script for atlas anchor")
     parser.add_argument('--listen', metavar="0.0.0.0:9999", default="0.0.0.0:9999", help='listen address:port for server port is optional')
     parser.add_argument('--domains', metavar="pmm.johnbond.org:9999[,ripe.jonbond.org:9999]", default="pmm.johnbond.org:9999", help='comma seperated list of domain:port pairs')
